@@ -95,19 +95,21 @@ class featureExtraction:
 
 
     def validate_homography(self,image_index_1,image_index_2,H,correspondences,mask):
-        # Get inliers for image pair
+        # Validate homography matrix
         # Input:
         #   image_index_1: index of image 1
         #   image_index_2: index of image 2
+        #   H: homography matrix
+        #   correspondences: correspondence matrix
         # Output:
-        #   inliers: list of inliers
+        #   valid: boolean indicating if homography is valid
         img_1 = self.image_list[image_index_1]
         img_2 = self.image_list[image_index_2]
 
         if H is None:
             return False
         else:
-            alpha = 0.8
+            alpha = 8.0
             beta = 0.3
 
             mask_1 = np.ones_like(img_1, dtype=np.uint8)
