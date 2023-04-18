@@ -59,6 +59,8 @@ class featureExtraction:
             for j in range(self.num_images):
                 if i == j:
                     continue
+                if len(self.matches[i,j]) == 0:
+                    self.matches[i,j] = None
                 if j not in sorted_matches:
                     self.matches[i,j] = None
 
