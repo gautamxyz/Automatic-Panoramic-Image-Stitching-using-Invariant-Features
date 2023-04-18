@@ -5,7 +5,7 @@ from itertools import compress
 
 class featureExtraction:
     def __init__(self,image_list,k=2,method="BF",match_threshold=100,maximum_matches=6,feature_correspondences=4,RANSAC_iterations=500):
-        self.image_list = image_list
+        self.image_list = self.initialize_images(image_list)
         self.num_images = len(image_list)
         self.keypoints = []
         self.descriptors = []
@@ -21,6 +21,17 @@ class featureExtraction:
         self.feature_correspondences = feature_correspondences
         self.RANSAC_iterations = RANSAC_iterations
 
+
+    def initialize_images(self,image_list):
+        # Convert all images in image_list to grayscale
+        # Input:
+        #   image_list: list of images
+        # Output:
+        #   image_list: list of grayscale images
+        for i in range(len(image_list)):
+            image_list[i] = cv.cvtColor(image_list[i], cv.COLOR_BGR2GRAY)
+        return image_list
+
     def initialize_homographies(self):
         # Initialize homographies to identity matrix
         # Input:
@@ -30,7 +41,7 @@ class featureExtraction:
         homographies = np.empty((self.num_images,self.num_images),dtype=object)
         for i in range(self.num_images):
             for j in range(self.num_images):
-                homographies[i,j] = np.eye(3)
+                homographies[i,j] = None
 
         return homographies
     
@@ -92,7 +103,8 @@ class featureExtraction:
 
         # Compute homography matrix
         H, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, ransacReprojThreshold=1.0)
-
+        # Normalize homography matrix
+        H = H/H[2,2]
         return H, mask, correspondences
 
 
@@ -142,6 +154,12 @@ class featureExtraction:
                 if i == j:
                     continue
                 if self.homographies[i,j] is not None:
+                    continue
+                if self.matches[i,j] is None:
+                    self.homographies[i,j] = None
+                    self.homographies[j,i] = None
+                    self.inliers[i,j] = 0
+                    self.inliers[j,i] = 0
                     continue
                 # Compute homography
                 H , mask, correspondences = self.get_H_matrix(i,j)
