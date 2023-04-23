@@ -6,8 +6,8 @@ def setOverlap(img1_idx,img2_idx,homographies,imgList):
     """
     Compute and set the overlap region between the two images.
     """
-    mask_a = np.ones_like(imgList[img1_idx],dtype=np.uint8)
-    mask_b = cv2.warpPerspective(np.ones_like(imgList[img2_idx],dtype=np.uint8),homographies[img1_idx][img2_idx],mask_a.shape[::-1])
+    mask_a = np.ones_like(imgList[img1_idx][:, :, 0],dtype=np.uint8)
+    mask_b = cv2.warpPerspective(np.ones_like(imgList[img2_idx][:, :, 0],dtype=np.uint8),homographies[img1_idx][img2_idx],mask_a.shape[::-1])
     overlap = mask_a * mask_b
     area_overlap = overlap.sum()
     return overlap,area_overlap
@@ -46,17 +46,19 @@ def gainCompensation(imgList,matches,homographies,sigma_n: float = 10.0, sigma_g
     sigma_g : float, optional
         Standard deviation of the gain, by default 0.1
     """
-
+    # for i in range(len(imgList)):
+    #     # convert img to gray
+    #     imgList[i] = cv2.cvtColor(imgList[i], cv2.COLOR_BGR2GRAY)
     coefficients = []
     results = []
 
-    for idx, img in enumerate(imgList):
+    for k, img in enumerate(imgList):
         coefs = [np.zeros(3) for _ in range(len(imgList))]
         result = np.zeros(3)
 
         # travel in the k'th row and k'th column of the matrix
-        for i in range(len(matches)):
-            if i!=idx:
+        for i in range(len(imgList)):
+            if i!=k:
                 if(matches[i][k]!=None):
                     overlap,area_overlap = setOverlap(i,k,homographies,imgList)
                     Iab,Iba = setIntensities(i,k,homographies,imgList,overlap)
@@ -78,8 +80,8 @@ def gainCompensation(imgList,matches,homographies,sigma_n: float = 10.0, sigma_g
                     )
                     result += area_overlap / sigma_g ** 2
 
-                coefficients.append(coefs)
-                results.append(result)
+        coefficients.append(coefs)
+        results.append(result)
 
     coefficients = np.array(coefficients)
     results = np.array(results)
@@ -91,7 +93,8 @@ def gainCompensation(imgList,matches,homographies,sigma_n: float = 10.0, sigma_g
         res = results[:, channel]
         gains[:, channel] = np.linalg.solve(coefs, res)
 
-    max_pixel_value = np.max([img for img in imgList])
+    # get the maximum pixel value in all images
+    max_pixel_value = np.max([img.max(axis=(0,1)) for img in imgList])
 
     if gains.max() * max_pixel_value > 255:
         gains = gains / (gains.max() * max_pixel_value) * 255
