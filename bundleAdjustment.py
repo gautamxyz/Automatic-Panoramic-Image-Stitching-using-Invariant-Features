@@ -1,5 +1,9 @@
-import numpy as np
 import cv2 as cv
+import numpy as np
+import networkx as nx
+import scipy.sparse.csgraph as csgraph
+import scipy.optimize
+from logger import logger
 
 # define the residual function
 def get_diff(v1,v2):
@@ -37,21 +41,17 @@ def residual(H_init, src_pts_list, dst_pts_list):
     # dst_pts_ = cv.perspectiveTransform(dst_pts, H.reshape(3,3))
     # return (dst_pts_ - src_pts).reshape(-1)
 
-import cv2 as cv
-import numpy as np
-import networkx as nx
-import scipy.sparse.csgraph as csgraph
-import scipy.optimize
 
 
 class bundleAdjustment():
 
-    def __init__(self,matches, numMatches, homographies, imgList,keypoints):
+    def __init__(self,matches, numMatches, homographies, imgList,keypoints, startPoint="degree"):
         self.matches = matches
         self.numMatches = numMatches
         self.homographies = homographies
         self.imgList = imgList
         self.kp = keypoints
+        self.startPoint = startPoint
         self.path = []
         self.paths = []
         self.bundleHomo = []
@@ -78,14 +78,14 @@ class bundleAdjustment():
                     visited[i] = True
                     queue.append(i)
 
-    def buildNetwork(self):
+    def buildNetwork(self,mode):
         G = nx.Graph(self.numMatches)
         # create connected components
         connected_components = list(nx.connected_components(G))
         # if a connected component has just 1 node, it is a single image, remove it
         connected_components = [x for x in connected_components if len(x) > 1]
         num_connected_components = len(connected_components)
-        print("Number of panoramas detected: ", num_connected_components)
+        logger.info("Number of panoramas detected: "+ str(num_connected_components))
         # for each connected compnent apply mst algorithm
         for i in range(num_connected_components):
             # get the connected component
@@ -101,7 +101,6 @@ class bundleAdjustment():
             # find the node that has maximum number of matches with its neighbors
             # get the nodes of the mst
             nodes = list(mst.nodes())
-            mode = "degree"
             max_matches = 0
             max_degree = 0
             index_node = 0
@@ -139,7 +138,7 @@ class bundleAdjustment():
         while len(parent[cur]) != 0:
             par = parent[cur][0]
             if self.homographies[cur][par] is None:
-                print("No homography between ", cur, " and ", par)
+                logger.info("No homography between {} and {}".format(cur,par))
             else: 
                 H = np.matmul(self.homographies[cur][par],H)
             cur = par
@@ -197,14 +196,14 @@ class bundleAdjustment():
 
     
     def run(self):
-        print("Building network and ordering...")
-        self.buildNetwork()
+        logger.info("Building network and ordering...")
+        self.buildNetwork(self.startPoint)
         # return
-        print("Performing bundle adjustment for each panorama...")
+        logger.info("Performing bundle adjustment for each panorama...")
         for i in range(len(self.paths)):
-            print("Panorama ",i+1)
+            logger.info("Panorama "+str(i+1))
             ordered_H, initial_H = self.bundleAdjuster(self.paths[i], self.parents[i])
             self.bundleHomo.append(ordered_H)
             self.initialHomo.append(initial_H)
-        print("Completed bundle adjustment for all panoramas")
+        logger.info("Completed bundle adjustment for all panoramas")
     

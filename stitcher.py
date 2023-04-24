@@ -5,13 +5,17 @@ import matplotlib.pyplot as plt
 
 class Stitcher():
 
-    def __init__(self, images, homographies, gain_list):
+    def __init__(self, images, homographies, gain_list, setGain=True, blending="Linear",numBands=7, sigma=1):
         self.images = images
+        self.setGain = setGain
         self.gains = gain_list
         self.homographies = homographies
         self.offset = np.eye(3)
         self.panorama = None
         self.weights = None
+        self.blending = blending
+        self.numBands = numBands
+        self.sigma = sigma
         self.width = 0
         self.height = 0
         self.preProcessImages()
@@ -33,7 +37,8 @@ class Stitcher():
     
     def preProcessImages(self):
         for i in range(len(self.images)):
-            self.images[i] = self.apply_filter(self.images[i],self.gains[i])
+            if self.setGain:
+                self.images[i] = self.apply_filter(self.images[i],self.gains[i])
             self.images[i] = cv.cvtColor(self.images[i], cv.COLOR_BGR2RGB)
 
     def getWeightsArray(self,size):
@@ -281,8 +286,14 @@ class Stitcher():
             self.panorama[self.panorama < 0] = 0
             self.panorama[self.panorama > 255] = 255
 
-    def stitch(self):
+    def linearBlending(self):
         for idx in range(len(self.images)):
             image = self.images[idx]
             H = self.homographies[idx]
             self.addImage(image, H)
+
+    def stitch(self):
+        if self.blending == "Linear":
+            self.linearBlending()
+        elif self.blending == "MultiBand":
+            self.multiBandBlending(self.numBands,self.sigma)

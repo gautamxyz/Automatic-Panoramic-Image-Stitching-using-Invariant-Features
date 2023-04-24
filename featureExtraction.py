@@ -2,9 +2,10 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 from itertools import compress
+from logger import logger
 
 class featureExtraction:
-    def __init__(self,image_list,k=2,method="BF",match_threshold=100,maximum_matches=6,feature_correspondences=4,RANSAC_iterations=500):
+    def __init__(self,image_list,k=2,featureDetection="SIFT",featureMatching="BF",match_threshold=100,maximum_matches=6,feature_correspondences=4,RANSAC_iterations=500):
         self.image_list = self.initialize_images(image_list)
         self.num_images = len(image_list)
         self.keypoints = []
@@ -14,7 +15,8 @@ class featureExtraction:
         self.homographies = self.initialize_homographies()
         self.adjacency_matrix = np.zeros((self.num_images,self.num_images),dtype=int)
         self.k = k
-        self.method = method
+        self.featureMatching = featureMatching
+        self.featureDetection = featureDetection
         self.ratio = 0.7
         self.match_threshold = match_threshold
         self.maximum_matches = maximum_matches
@@ -206,7 +208,8 @@ class featureExtraction:
         # Loop through all images
         for image in self.image_list:
             # Extract SIFT features
-            keypoints, descriptors = self.extractSIFTFeatures(image)
+            if self.featureDetection == "SIFT":
+                keypoints, descriptors = self.extractSIFTFeatures(image)
             # Add keypoints and descriptors to lists
             self.keypoints.append(keypoints)
             self.descriptors.append(descriptors)
@@ -216,17 +219,17 @@ class featureExtraction:
         # Input:
         #   descriptors_1: SIFT descriptors from image 1
         #   descriptors_2: SIFT descriptors from image 2
-        #   method: matching method, "BF" for brute force, "FLANN" for FLANN
+        #   featureMatching: matching method, "BF" for brute force, "FLANN" for FLANN
         #   k: number of nearest neighbors in KNN
         # Output:
         #   matches: SIFT matches
 
-        if self.method == "BF":
+        if self.featureMatching == "BF":
             # Create BFMatcher object
             bf = cv.BFMatcher()
             # Match descriptors
             matches = bf.knnMatch(descriptors_1,descriptors_2, k=self.k)
-        elif self.method == "FLANN":
+        elif self.featureMatching == "FLANN":
             FLANN_INDEX_KDTREE = 1
             index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
             search_params = dict(checks = 50)
@@ -330,15 +333,15 @@ class featureExtraction:
                 self.adjacency_matrix[i,j] = 1 if len(matches) > 0 else 0
     
     def run(self):
-        print("Extracting SIFT features...")
+        logger.info("Extracting SIFT features...")
         self.computeFeatures()
-        print("Generating matches...")
+        logger.info("Generating matches...")
         self.computeMatches()
-        print("Processing matches...")
+        logger.info("Processing matches...")
         self.process_maximum_matches()
-        print("Computing homographies...")
+        logger.info("Computing homographies...")
         self.compute_homograpies()
-        print("Computing adjacency matrix...")
+        logger.info("Computing adjacency matrix...")
         self.computeAdjacencyMatrix()
 
 
