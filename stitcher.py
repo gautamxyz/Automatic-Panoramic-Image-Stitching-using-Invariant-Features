@@ -75,8 +75,8 @@ class Stitcher():
         width = int(np.ceil(max(bottom_right_x, top_right_x)))
         height = int(np.ceil(max(bottom_right_y, bottom_left_y)))
 
-        # width = min(width, 5000)
-        # height = min(height, 4000)
+        width = min(width, 5000)
+        height = min(height, 4000)
         return width, height
 
     # Generate the corners of the panaroma image.
@@ -160,6 +160,8 @@ class Stitcher():
 
         max_weights = np.max(self.weights + image_weights)
         self.weights = (self.weights + image_weights) / max_weights
+        # Update the offset matrix
+        self.offset = required_offset @ self.offset
 
     def add_weights(self,weights_matrix ,image,idx):
         H = self.offset @ self.homographies[idx]
@@ -272,6 +274,8 @@ class Stitcher():
         self.panorama = np.zeros((*maxWeightsMatrix.shape[1:], 3), dtype = np.uint8)
         
         for k in range(0, numBands):
+            # plt.imshow(self.panorama)
+            # plt.show()
             temp = self.build_band_panorama(k,bands[k],size).astype(np.uint8)
             self.panorama += temp
             self.panorama[self.panorama < 0] = 0
