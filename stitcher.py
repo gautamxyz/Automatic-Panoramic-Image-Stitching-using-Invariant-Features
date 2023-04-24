@@ -5,14 +5,36 @@ import matplotlib.pyplot as plt
 
 class Stitcher():
 
-    def __init__(self, images, homographies):
+    def __init__(self, images, homographies, gain_list):
         self.images = images
+        self.gains = gain_list
         self.homographies = homographies
         self.offset = np.eye(3)
         self.panaroma = None
         self.weights = None
         self.width = 0
         self.height = 0
+        self.preProcessImages()
+
+    def apply_filter(self,image,filter):
+        # filter is a 1x3 array
+        # image is a 2D array with 3 channels
+        # returns a 2D array with 3 channels
+
+        # convert image to float
+        image = image.astype(np.float32)
+        # apply filter
+        image[:,:,0] = image[:,:,0]*filter[0]
+        image[:,:,1] = image[:,:,1]*filter[1]
+        image[:,:,2] = image[:,:,2]*filter[2]
+        # convert back to uint8
+        image = image.astype(np.uint8)
+        return image
+    
+    def preProcessImages(self):
+        for i in range(len(self.images)):
+            self.images[i] = self.apply_filter(self.images[i],self.gains[i])
+            self.images[i] = cv.cvtColor(self.images[i], cv.COLOR_BGR2RGB)
 
     def getWeightsArray(self,size):
         if size % 2 == 1:
@@ -130,14 +152,11 @@ class Stitcher():
         self.panaroma = np.where(
             np.logical_and(
                 np.repeat(np.sum(self.panaroma, axis=2)[:,:,np.newaxis], 3, axis=2) == 0,
-                np.repeat(np.sum(warped_image, axis=2)[:,:,np.newaxis], 3, axis=2) != 0
+                np.repeat(np.sum(warped_image, axis=2)[:,:,np.newaxis], 3, axis=2) == 0
             ),
             0,
             warped_image * (1 - normalized_weights) + self.panaroma * normalized_weights,
         ).astype(np.uint8)
-
-        plt.imshow(image)
-        plt.show()
 
         max_weights = np.max(self.weights + image_weights)
         self.weights = (self.weights + image_weights) / max_weights
