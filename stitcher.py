@@ -10,7 +10,7 @@ class Stitcher():
         self.gains = gain_list
         self.homographies = homographies
         self.offset = np.eye(3)
-        self.panaroma = None
+        self.panorama = None
         self.weights = None
         self.width = 0
         self.height = 0
@@ -75,8 +75,8 @@ class Stitcher():
         width = int(np.ceil(max(bottom_right_x, top_right_x)))
         height = int(np.ceil(max(bottom_right_y, bottom_left_y)))
 
-        # width = min(width, 5000)
-        # height = min(height, 4000)
+        width = min(width, 5000)
+        height = min(height, 4000)
         return width, height
 
     # Generate the corners of the panaroma image.
@@ -110,12 +110,12 @@ class Stitcher():
         required_offset = self.generateOffset(new_corners)
         shifted_corners_image = self.generateCorners(image, required_offset @ H)
 
-        if self.panaroma is None:
+        if self.panorama is None:
             self.width, self.height = self.getBoundingBox(
                 [shifted_corners_image])
-            # self.panaroma = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+            # self.panorama = np.zeros((self.height, self.width, 3), dtype=np.uint8)
         else:
-            current_corners = self.generateCorners(self.panaroma, required_offset)
+            current_corners = self.generateCorners(self.panorama, required_offset)
             self.width, self.height = self.getBoundingBox(
                 [current_corners, shifted_corners_image])
             
@@ -130,12 +130,12 @@ class Stitcher():
         warped_image = cv.warpPerspective(
             image, required_offset @ H, (self.width, self.height))
         # Add the warped image to the panaroma image
-        if self.panaroma is None:
-            self.panaroma = np.zeros_like(warped_image)
+        if self.panorama is None:
+            self.panorama = np.zeros_like(warped_image)
             self.weights = np.zeros_like(warped_image)
         else:
-            self.panaroma = cv.warpPerspective(
-                self.panaroma, required_offset, (self.width, self.height))
+            self.panorama = cv.warpPerspective(
+                self.panorama, required_offset, (self.width, self.height))
             self.weights = cv.warpPerspective(
                 self.weights, required_offset, (self.width, self.height))
 
@@ -149,29 +149,31 @@ class Stitcher():
             self.weights, (self.weights+image_weights), where= self.weights+image_weights != 0, out=normalized_weights
         )
 
-        self.panaroma = np.where(
+        self.panorama = np.where(
             np.logical_and(
-                np.repeat(np.sum(self.panaroma, axis=2)[:,:,np.newaxis], 3, axis=2) == 0,
+                np.repeat(np.sum(self.panorama, axis=2)[:,:,np.newaxis], 3, axis=2) == 0,
                 np.repeat(np.sum(warped_image, axis=2)[:,:,np.newaxis], 3, axis=2) == 0
             ),
             0,
-            warped_image * (1 - normalized_weights) + self.panaroma * normalized_weights,
+            warped_image * (1 - normalized_weights) + self.panorama * normalized_weights,
         ).astype(np.uint8)
 
         max_weights = np.max(self.weights + image_weights)
         self.weights = (self.weights + image_weights) / max_weights
+        # Update the offset matrix
+        self.offset = required_offset @ self.offset
 
     def add_weights(self,weights_matrix ,image,idx):
         H = self.offset @ self.homographies[idx]
         added_offset = self.updatePanaroma(image,H)
         weights = self.generateWeights(image.shape)
         size = (self.width, self.height)
-        weights = cv2.warpPerspective(weights, added_offset @ H, size)[:, :, np.newaxis]
+        weights = cv.warpPerspective(weights, added_offset @ H, size)[:, :, np.newaxis]
 
         if weights_matrix is None:
             weights_matrix = weights
         else:
-            weights_matrix = cv2.warpPerspective(weights_matrix, added_offset, size)
+            weights_matrix = cv.warpPerspective(weights_matrix, added_offset, size)
 
             if len(weights_matrix.shape) == 2:
                 weights_matrix = weights_matrix[:, :, np.newaxis]
@@ -186,7 +188,7 @@ class Stitcher():
         weights_matrix = None
 
         for idx,image in enumerate(self.images):
-            weights_matrix = add_weights(weights_matrix,image,idx)
+            weights_matrix = self.add_weights(weights_matrix,image,idx)
 
         weights_maxes = np.max(weights_matrix, axis=2)[:, :, np.newaxis]
         max_weights_matrix = np.where(
@@ -201,26 +203,25 @@ class Stitcher():
         cropped_weights = []
         for i, image in enumerate(self.images):
             cropped_weights.append(
-                cv2.warpPerspective(
+                cv.warpPerspective(
                     weights[i], np.linalg.inv(self.offset @ self.homographies[i]), image.shape[:2][::-1]
                 )
             )
 
         return cropped_weights
 
-    def build_band_panorama(self,k,bands):
-        size = (self.width, self.height)
+    def build_band_panorama(self,k,bands,size):
+        # size = (self.height, self.width)
         pano_weights = np.zeros(size)
         pano_bands = np.zeros((*size, 3))
         weights = self.weights[k]
 
         for i, image in enumerate(self.images):
-            weights_at_scale = cv2.warpPerspective(weights[i], self.offset @ self.homographies[i], size[::-1])
+            weights_at_scale = cv.warpPerspective(weights[i], self.offset @ self.homographies[i], size[::-1])
             pano_weights += weights_at_scale
-            pano_bands += weights_at_scale[:, :, np.newaxis] * cv2.warpPerspective(
+            pano_bands += weights_at_scale[:, :, np.newaxis] * cv.warpPerspective(
                 bands[i], self.offset @ self.homographies[i], size[::-1]
             )
-
         return np.divide(
             pano_bands, pano_weights[:, :, np.newaxis], where=pano_weights[:, :, np.newaxis] != 0
         )
@@ -230,8 +231,8 @@ class Stitcher():
         size = maxWeightsMatrix.shape[1:]
         maxWeights = self.get_cropped_weights(maxWeightsMatrix)
 
-        self.weights = [[cv2.GaussianBlur(maxWeights[i],(0,0),2*sigma) for i in range(len(self.images))]]
-        sigmaImages = [cv2.GaussianBlur(self.images[i],(0,0),sigma) for i in range(len(self.images))]
+        self.weights = [[cv.GaussianBlur(maxWeights[i],(0,0),2*sigma) for i in range(len(self.images))]]
+        sigmaImages = [cv.GaussianBlur(self.images[i],(0,0),sigma) for i in range(len(self.images))]
 
         bands = [
             [
@@ -244,16 +245,16 @@ class Stitcher():
             ]
         ]
 
-        for k in range(1, num_bands - 1):
+        for k in range(1, numBands - 1):
             sigma_k = np.sqrt(2 * k + 1) * sigma
             self.weights.append(
-                [cv2.GaussianBlur(self.weights[-1][i], (0, 0), sigma_k) for i in range(len(self.images))]
+                [cv.GaussianBlur(self.weights[-1][i], (0, 0), sigma_k) for i in range(len(self.images))]
             )
 
             oldSigmaImages = sigmaImages
 
             sigmaImages = [
-                cv2.GaussianBlur(old_sigma_image, (0, 0), sigma_k)
+                cv.GaussianBlur(old_sigma_image, (0, 0), sigma_k)
                 for old_sigma_image in oldSigmaImages
             ]
             bands.append(
@@ -267,12 +268,16 @@ class Stitcher():
                 ]
             )
 
-        self.weights.append([cv2.GaussianBlur(self.weights[-1][i], (0, 0), sigma_k) for i in range(len(self.images))])
+        self.weights.append([cv.GaussianBlur(self.weights[-1][i], (0, 0), sigma_k) for i in range(len(self.images))])
         bands.append([sigmaImages[i] for i in range(len(self.images))])
 
-        self.panorama = np.zeros((*maxWeightsMatrix.shape[1:], 3))
-        for k in range(0, num_bands):
-            self.panorama += self.build_band_panorama(k,bands[k])
+        self.panorama = np.zeros((*maxWeightsMatrix.shape[1:], 3), dtype = np.uint8)
+        
+        for k in range(0, numBands):
+            # plt.imshow(self.panorama)
+            # plt.show()
+            temp = self.build_band_panorama(k,bands[k],size).astype(np.uint8)
+            self.panorama += temp
             self.panorama[self.panorama < 0] = 0
             self.panorama[self.panorama > 255] = 255
 
