@@ -161,6 +161,120 @@ class Stitcher():
         max_weights = np.max(self.weights + image_weights)
         self.weights = (self.weights + image_weights) / max_weights
 
+    def add_weights(self,weights_matrix ,image,idx):
+        H = self.offset @ self.homographies[idx]
+        added_offset = self.updatePanaroma(image,H)
+        weights = self.generateWeights(image.shape)
+        size = (self.width, self.height)
+        weights = cv2.warpPerspective(weights, added_offset @ H, size)[:, :, np.newaxis]
+
+        if weights_matrix is None:
+            weights_matrix = weights
+        else:
+            weights_matrix = cv2.warpPerspective(weights_matrix, added_offset, size)
+
+            if len(weights_matrix.shape) == 2:
+                weights_matrix = weights_matrix[:, :, np.newaxis]
+
+            weights_matrix = np.concatenate([weights_matrix, weights], axis=2)
+
+        self.offset = added_offset @ self.offset
+        return weights_matrix
+
+
+    def getMaxWeightsMatrix(self):
+        weights_matrix = None
+
+        for idx,image in enumerate(self.images):
+            weights_matrix = add_weights(weights_matrix,image,idx)
+
+        weights_maxes = np.max(weights_matrix, axis=2)[:, :, np.newaxis]
+        max_weights_matrix = np.where(
+            np.logical_and(weights_matrix == weights_maxes, weights_matrix > 0), 1.0, 0.0
+        )
+
+        max_weights_matrix = np.transpose(max_weights_matrix, (2, 0, 1))
+
+        return max_weights_matrix
+
+    def get_cropped_weights(self,weights):
+        cropped_weights = []
+        for i, image in enumerate(self.images):
+            cropped_weights.append(
+                cv2.warpPerspective(
+                    weights[i], np.linalg.inv(self.offset @ self.homographies[i]), image.shape[:2][::-1]
+                )
+            )
+
+        return cropped_weights
+
+    def build_band_panorama(self,k,bands):
+        size = (self.width, self.height)
+        pano_weights = np.zeros(size)
+        pano_bands = np.zeros((*size, 3))
+        weights = self.weights[k]
+
+        for i, image in enumerate(self.images):
+            weights_at_scale = cv2.warpPerspective(weights[i], self.offset @ self.homographies[i], size[::-1])
+            pano_weights += weights_at_scale
+            pano_bands += weights_at_scale[:, :, np.newaxis] * cv2.warpPerspective(
+                bands[i], self.offset @ self.homographies[i], size[::-1]
+            )
+
+        return np.divide(
+            pano_bands, pano_weights[:, :, np.newaxis], where=pano_weights[:, :, np.newaxis] != 0
+        )
+
+    def multiBandBlending(self,numBands,sigma):
+        maxWeightsMatrix = self.getMaxWeightsMatrix()
+        size = maxWeightsMatrix.shape[1:]
+        maxWeights = self.get_cropped_weights(maxWeightsMatrix)
+
+        self.weights = [[cv2.GaussianBlur(maxWeights[i],(0,0),2*sigma) for i in range(len(self.images))]]
+        sigmaImages = [cv2.GaussianBlur(self.images[i],(0,0),sigma) for i in range(len(self.images))]
+
+        bands = [
+            [
+                np.where(
+                    self.images[i].astype(np.int64) - sigmaImages[i].astype(np.int64) > 0,
+                    self.images[i] - sigmaImages[i],
+                    0,
+                )
+                for i in range(len(self.images))
+            ]
+        ]
+
+        for k in range(1, num_bands - 1):
+            sigma_k = np.sqrt(2 * k + 1) * sigma
+            self.weights.append(
+                [cv2.GaussianBlur(self.weights[-1][i], (0, 0), sigma_k) for i in range(len(self.images))]
+            )
+
+            oldSigmaImages = sigmaImages
+
+            sigmaImages = [
+                cv2.GaussianBlur(old_sigma_image, (0, 0), sigma_k)
+                for old_sigma_image in oldSigmaImages
+            ]
+            bands.append(
+                [
+                    np.where(
+                        oldSigmaImages[i].astype(np.int64) - sigmaImages[i].astype(np.int64) > 0,
+                        oldSigmaImages[i] - sigmaImages[i],
+                        0,
+                    )
+                    for i in range(len(self.images))
+                ]
+            )
+
+        self.weights.append([cv2.GaussianBlur(self.weights[-1][i], (0, 0), sigma_k) for i in range(len(self.images))])
+        bands.append([sigmaImages[i] for i in range(len(self.images))])
+
+        self.panorama = np.zeros((*maxWeightsMatrix.shape[1:], 3))
+        for k in range(0, num_bands):
+            self.panorama += self.build_band_panorama(k,bands[k])
+            self.panorama[self.panorama < 0] = 0
+            self.panorama[self.panorama > 255] = 255
 
     def stitch(self):
         for idx in range(len(self.images)):
