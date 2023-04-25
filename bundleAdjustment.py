@@ -57,6 +57,7 @@ class bundleAdjustment():
         self.bundleHomo = []
         self.initialHomo = []
         self.parents = []
+        self.srcs = []
 
     def bfs(self, G, node):
 
@@ -127,6 +128,7 @@ class bundleAdjustment():
             # apply dfs from the node with maximum number of matches
             # print(index_node, nodes[index_node])
             src = nodes[index_node]
+            self.srcs.append(src)
             parents = nx.predecessor(mst, src)
             self.parents.append(parents)
             self.bfs(mst, nodes[index_node])

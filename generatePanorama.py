@@ -11,13 +11,19 @@ from stitcher import Stitcher
 
 def dataLoader(path,limit=None):
     img_list = []
-    for file in os.listdir(path):
+    file_list = os.listdir(path)
+    for file in file_list:
+        if os.path.isfile(os.path.join(path,file))==False:
+            continue
         img = cv.imread(os.path.join(path,file))
         img_list.append(img)
         if limit!=None and len(img_list)==limit:
             break
     return img_list
 
+def get_network(adjacency_matrix):
+    G = nx.Graph(adjacency_matrix)
+    return G
 
 def generatePanaroma(img_list,args):
 
@@ -32,6 +38,7 @@ def generatePanaroma(img_list,args):
 
     fe = featureExtraction(img_list.copy(),featureDetection=featureDetection,featureMatching=featureMatching)
     fe.run()
+    G = get_network(fe.adjacency_matrix)
     numMatches=np.zeros((len(img_list),len(img_list)))
     for i in range(len(img_list)):
         for j in range(len(img_list)):
@@ -41,8 +48,16 @@ def generatePanaroma(img_list,args):
             numMatches[i,j]=-len(fe.matches[i][j]) # we take -ve wts as we want to retain the edges with more matches while applying MST
     BA=bundleAdjustment(fe.matches.copy(),numMatches,fe.homographies.copy(),img_list.copy(),fe.keypoints,startPoint=startPoint)
     BA.run()
+    color_map = []
+    for node in G:
+        if node not in BA.srcs:
+            color_map.append('#00b4d9')
+        else:
+            color_map.append('green')
+
     gain_list = []
-    gainCompensation(img_list.copy(),fe.matches.copy(),fe.homographies.copy(),gainList=gain_list)
+    if gain:
+        gainCompensation(img_list.copy(),fe.matches.copy(),fe.homographies.copy(),gainList=gain_list)
 
     panos = []
     for i in range(len(BA.paths)):
@@ -51,7 +66,8 @@ def generatePanaroma(img_list,args):
         H_list = [np.eye(3)]
         for j in path:
             img_list.append(BA.imgList[j])
-        for H in BA.bundleHomo[i]:
+
+        for H in BA.initialHomo[i]:
             H_list.append(H)
 
         if opencv:
@@ -65,5 +81,5 @@ def generatePanaroma(img_list,args):
         st.stitch()
         pano = st.panorama
         panos.append(pano)
-    return panos
+    return color_map,G,panos
     

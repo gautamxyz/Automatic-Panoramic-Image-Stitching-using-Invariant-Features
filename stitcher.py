@@ -54,7 +54,7 @@ class Stitcher():
         h, w = shape[:2]
         h_weights = self.getWeightsArray(h)[: , np.newaxis]
         w_weights = self.getWeightsArray(w)[: , np.newaxis].T
-        return h_weights @ w_weights
+        return (h_weights @ w_weights)
 
     # Transform a given list of points using the given homography matrix.
     def transformPoints(self, points, H):
@@ -80,8 +80,8 @@ class Stitcher():
         width = int(np.ceil(max(bottom_right_x, top_right_x)))
         height = int(np.ceil(max(bottom_right_y, bottom_left_y)))
 
-        width = min(width, 5000)
-        height = min(height, 4000)
+        # width = min(width, 5000)
+        # height = min(height, 4000)
         return width, height
 
     # Generate the corners of the panaroma image.
@@ -110,27 +110,26 @@ class Stitcher():
             ],
             dtype=np.float32,
         )
-    def updatePanaroma(self, image, H):
+    def updatePanaroma(self, panorama, image, H):
         new_corners = self.generateCorners(image, H)
         required_offset = self.generateOffset(new_corners)
         shifted_corners_image = self.generateCorners(image, required_offset @ H)
 
-        if self.panorama is None:
+        if panorama is None:
             self.width, self.height = self.getBoundingBox(
                 [shifted_corners_image])
-            # self.panorama = np.zeros((self.height, self.width, 3), dtype=np.uint8)
         else:
-            current_corners = self.generateCorners(self.panorama, required_offset)
+            current_corners = self.generateCorners(panorama, required_offset)
             self.width, self.height = self.getBoundingBox(
-                [current_corners, shifted_corners_image])
-            
+                [current_corners, shifted_corners_image])   
+                     
         return required_offset
 
     def addImage(self, image, H):
         # Shift homography by current offset
         H = self.offset @ H
         # Generate new size and offset after adding the current image
-        required_offset = self.updatePanaroma(image, H)
+        required_offset = self.updatePanaroma(self.panorama,image, H)
         # Warp the current image to the panaroma image frame with the new offset
         warped_image = cv.warpPerspective(
             image, required_offset @ H, (self.width, self.height))
@@ -149,9 +148,9 @@ class Stitcher():
             cv.warpPerspective(image_weights, required_offset @ H, (self.width, self.height))[:, :, np.newaxis], 3, axis=2
         )
 
-        normalized_weights = np.zeros_like(self.weights, dtype=np.float64)
-        np.divide(
-            self.weights, (self.weights+image_weights), where= self.weights+image_weights != 0, out=normalized_weights
+        normalized_weights = np.zeros_like(self.weights)
+        normalized_weights = np.divide(
+            self.weights, (self.weights+image_weights), where= self.weights+image_weights != 0
         )
 
         self.panorama = np.where(
@@ -170,7 +169,7 @@ class Stitcher():
 
     def add_weights(self,weights_matrix ,image,idx):
         H = self.offset @ self.homographies[idx]
-        added_offset = self.updatePanaroma(image,H)
+        added_offset = self.updatePanaroma(weights_matrix,image,H)
         weights = self.generateWeights(image.shape)
         size = (self.width, self.height)
         weights = cv.warpPerspective(weights, added_offset @ H, size)[:, :, np.newaxis]
@@ -191,7 +190,6 @@ class Stitcher():
 
     def getMaxWeightsMatrix(self):
         weights_matrix = None
-
         for idx,image in enumerate(self.images):
             weights_matrix = self.add_weights(weights_matrix,image,idx)
 
@@ -276,16 +274,16 @@ class Stitcher():
         self.weights.append([cv.GaussianBlur(self.weights[-1][i], (0, 0), sigma_k) for i in range(len(self.images))])
         bands.append([sigmaImages[i] for i in range(len(self.images))])
 
-        self.panorama = np.zeros((*maxWeightsMatrix.shape[1:], 3), dtype = np.uint8)
+        self.panorama = np.zeros((*maxWeightsMatrix.shape[1:], 3))
         
         for k in range(0, numBands):
-            # plt.imshow(self.panorama)
-            # plt.show()
-            temp = self.build_band_panorama(k,bands[k],size).astype(np.uint8)
+            temp = self.build_band_panorama(k,bands[k],size)
             self.panorama += temp
             self.panorama[self.panorama < 0] = 0
             self.panorama[self.panorama > 255] = 255
 
+        self.panorama = self.panorama.astype(np.uint8)
+        
     def linearBlending(self):
         for idx in range(len(self.images)):
             image = self.images[idx]
