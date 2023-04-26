@@ -59,7 +59,7 @@ def gainCompensation(imgList,matches,homographies,sigma_n: float = 10.0, sigma_g
         # travel in the k'th row and k'th column of the matrix
         for i in range(len(imgList)):
             if i!=k:
-                if(matches[i][k]!=None):
+                if(matches[k][i]!=None):
                     overlap,area_overlap = setOverlap(i,k,homographies,imgList)
                     Iab,Iba = setIntensities(i,k,homographies,imgList,overlap)
                     coefs[k] += area_overlap * (
@@ -69,7 +69,7 @@ def gainCompensation(imgList,matches,homographies,sigma_n: float = 10.0, sigma_g
                         (2 / sigma_n ** 2) * area_overlap * Iab * Iba
                     )
                     result += area_overlap / sigma_g ** 2
-                if(matches[k][i]!=None):
+                if(matches[i][k]!=None):
                     overlap,area_overlap = setOverlap(k,i,homographies,imgList)
                     Iab,Iba = setIntensities(k,i,homographies,imgList,overlap)
                     coefs[k] += area_overlap * (

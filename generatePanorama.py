@@ -67,7 +67,7 @@ def generatePanaroma(img_list,args):
         for j in path:
             img_list.append(BA.imgList[j])
 
-        for H in BA.initialHomo[i]:
+        for H in BA.bundleHomo[i]:
             H_list.append(H)
 
         if opencv:

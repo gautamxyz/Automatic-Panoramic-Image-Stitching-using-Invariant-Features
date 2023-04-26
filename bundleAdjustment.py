@@ -2,6 +2,7 @@ import cv2 as cv
 import numpy as np
 import networkx as nx
 import scipy.sparse.csgraph as csgraph
+import matplotlib.pyplot as plt
 import scipy.optimize
 from logger import logger
 
@@ -101,8 +102,9 @@ class bundleAdjustment():
             # plt.show()
             # find the node that has maximum number of matches with its neighbors
             # get the nodes of the mst
+            # !! NOTE The matches are negative as we are treating them as weights, so we find the min num of matches !!
             nodes = list(mst.nodes())
-            max_matches = 0
+            max_matches = np.inf
             max_degree = 0
             index_node = 0
             if mode == "degree":
@@ -121,13 +123,24 @@ class bundleAdjustment():
                     num_matches = 0
                     for neighbor in neighbors:
                         num_matches += self.numMatches[nodes[j]][neighbor]
-                    if num_matches > max_matches:
+                    if num_matches < max_matches:
                         max_matches = num_matches
                         index_node = j
+            elif mode == "random":
+                index_node = np.random.randint(0,len(nodes))
 
             # apply dfs from the node with maximum number of matches
             # print(index_node, nodes[index_node])
             src = nodes[index_node]
+            #  set src node as green and others blue in the mst
+            color_map = []
+            for node in mst:
+                if node == src:
+                    color_map.append('green')
+                else:
+                    color_map.append('#00b4d9')
+            nx.draw(mst, node_color=color_map, with_labels=True, font_weight='bold')
+            plt.show()
             self.srcs.append(src)
             parents = nx.predecessor(mst, src)
             self.parents.append(parents)

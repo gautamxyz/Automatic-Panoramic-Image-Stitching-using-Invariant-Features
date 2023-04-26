@@ -38,7 +38,7 @@ class Stitcher():
     def preProcessImages(self):
         for i in range(len(self.images)):
             if self.setGain:
-                self.images[i] = self.apply_filter(self.images[i],self.gains[i])
+                self.images[i] = (self.images[i] * self.gains[i][np.newaxis,np.newaxis,:]).astype(np.uint8)
             self.images[i] = cv.cvtColor(self.images[i], cv.COLOR_BGR2RGB)
 
     def getWeightsArray(self,size):

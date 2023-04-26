@@ -197,6 +197,34 @@ class featureExtraction:
         keypoints, descriptors = sift.detectAndCompute(img,None)
         return keypoints, descriptors
     
+    def extractSURFFeatures(self,img):
+        # Extract SURF features from an image
+        # Input:
+        #   img: image
+        # Output:
+        #   features: SURF features
+        #   descriptors: SURF descriptors
+
+        # Create SURF object
+        surf = cv.xfeatures2d.SURF_create()
+        # Find keypoints and descriptors
+        keypoints, descriptors = surf.detectAndCompute(img,None)
+        return keypoints, descriptors
+    
+    def extractORBFeatures(self,img):
+        # Extract ORB features from an image
+        # Input:
+        #   img: image
+        # Output:
+        #   features: ORB features
+        #   descriptors: ORB descriptors
+
+        # Create ORB object
+        orb = cv.ORB_create()
+        # Find keypoints and descriptors
+        keypoints, descriptors = orb.detectAndCompute(img,None)
+        return keypoints, descriptors
+    
     def computeFeatures(self):
         # Compute features for all images
         # Input:
@@ -210,6 +238,10 @@ class featureExtraction:
             # Extract SIFT features
             if self.featureDetection == "SIFT":
                 keypoints, descriptors = self.extractSIFTFeatures(image)
+            elif self.featureDetection == "SURF":
+                keypoints, descriptors = self.extractSURFFeatures(image)
+            elif self.featureDetection == "ORB":
+                keypoints, descriptors = self.extractORBFeatures(image)
             # Add keypoints and descriptors to lists
             self.keypoints.append(keypoints)
             self.descriptors.append(descriptors)
